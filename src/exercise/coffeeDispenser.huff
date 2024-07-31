@@ -1,0 +1,191 @@
+// interface 
+#define function checkCoffeeSupply() view returns (uint256)
+#define function addCoffee(uint256) view returns ()
+#define function buyCoffee(uint256) payable returns()
+#define function COFFEE_PRICE() view returns ()
+#define function numberOfCoffee() view returns ()
+
+// storage slot
+#define constant COFFEE_PRICE_LOCATION = FREE_STORAGE_POINTER()
+#define constant NUMBER_OF_COFFEE_LOCATION = FREE_STORAGE_POINTER()
+#define constant OWNER_ADDRESS_SLOT = FREE_STORAGE_POINTER()
+
+
+// Error
+#define error NOT_AUTHORIZED()
+#define error INVALID_AMOUNT()
+#define error INSUFFICIENT_SUPPLY()
+#define error INSUFFICIENT_FUNDS()
+
+#define macro MAIN() = takes(0) returns(0) {
+    0x00 calldataload 0xe0 shr                      // [func_sel]
+
+    dup1                                            // [func_sel, func_sel]
+    __FUNC_SIG(checkCoffeeSupply)                   // [0xa9f1718c, func_sel, func_sel]
+    eq                                              // [0xa9f1718c == func_sel, func_sel]
+    check_CoffeeSupply                               // [programCounter, 0xa9f1718c == func_sel, func_sel]
+    jumpi                                           // [func_sel]
+
+    dup1                                            // [func_sel, func_sel]
+    __FUNC_SIG(addCoffee)                           // [0xbbecfe9f, func_sel, func_sel]
+    eq                                              // [0xbbecfe9f == func_sel, func_sel]
+    addCoffee                                       // [programCounter, 0xbbecfe9ffu == func_sel, func_sel]
+    jumpi                                           // [func_sel]
+
+    dup1                                            // [func_sel, func_sel]
+    __FUNC_SIG(buyCoffee)                           // [0xbf165d18, func_sel, func_sel]
+    eq                                              // [0xbf165d18 == func_sel, func_sel]
+    buyCoffee                                       // [programCounter, 0xbf165d18 == func_sel, func_sel]
+    jumpi                                           // [func_sel]
+
+    dup1                                            // [func_sel, func_sel]
+    __FUNC_SIG(COFFEE_PRICE)                        // [0x5884dc8e, func_sel, func_sel]
+    eq                                              // [0x5884dc8e == func_sel, func_sel]
+    coffePrice                                      // [programCounter, 0x5884dc8e == func_sel, func_sel]
+    jumpi                                           // [func_sel]
+
+    dup1                                            // [func_sel, func_sel]
+    __FUNC_SIG(numberOfCoffee)                      // [0x510c98f9, func_sel, func_sel] 
+    eq                                              // [0x510c98f9 == func_sel, func_sel]
+    numberOfCoffee                                  // [programCounter, 0x510c98f9 == func_sel, func_sel]        
+    jumpi                                           // [func_sel]
+
+    0x00 0x00 revert
+
+
+
+
+    /////////////////////////////////////
+    /////////////////////////////////////
+
+    check_CoffeeSupply:
+    CHECK_COFFEE_SUPPLY()
+
+    addCoffee:
+    ADD_COFFEE()
+
+    buyCoffee:
+    BUY_COFFEE()
+
+    coffePrice:
+    COFFEE_PRICE()
+
+    numberOfCoffee:
+    NUMBER_OF_COFFEE()    
+}
+
+#define macro CONSTRUCTOR() = takes(0) returns(0) {
+    caller                          // [msg.sender]
+    [OWNER_ADDRESS_SLOT] sstore     // []
+}
+
+#define macro CHECK_COFFEE_SUPPLY() = takes(0) returns(1) {
+    0x04 calldataload
+    [NUMBER_OF_COFFEE_LOCATION]
+    sload
+    0x00 mstore
+    0x20 0x00 return
+}
+
+
+#define macro ADD_COFFEE() = takes(1) returns (0) {
+    caller                                        // [msg.sender]
+    [OWNER_ADDRESS_SLOT] sload                    // [owner, msg.sender]
+    eq                                            // [?owner == msg.sender]
+    authorized jumpi                              // jumps if authorized
+
+    __ERROR(NOT_AUTHORIZED)                       // [error_selector]
+    0x00 mstore                                   // []
+    0x04 0x00 return                             // revert with error
+
+    // if authorized
+    authorized:
+    0x04 calldataload                             // [amount]
+    [NUMBER_OF_COFFEE_LOCATION]                   // [NUMBER_OF_COFFEE_LOCATION, amount]
+    sload                                         // [current_no_of_coffee, amount]
+    add                                           // [new_number_of_coffee]
+
+    // update the storage slot
+    [NUMBER_OF_COFFEE_LOCATION]                   // [NUMBER_OF_STORAGE_LOCATION, new_number_of_coffee]
+    sstore                                        // []
+
+    // end execution
+    stop
+}
+
+
+#define macro BUY_COFFEE() = takes(1) returns(0) {
+    // load parameter from calldata
+    0x04 calldataload                         // [amount] amount of coffee to buy
+
+    // check if amount is greater than zero
+    dup1                                      // [amount, amount]
+    iszero                                    // [amount == 0, amount]
+    invalidAmount jumpi                       // jump if amount is zero
+
+    // load available numberOfCoffee
+    [NUMBER_OF_COFFEE_LOCATION] sload         // [numberOfCoffee, amount]
+    dup2 dup2                                 // [numberOfCoffee, amount, numberOfCoffee, amount]
+    gt                                        // [?numberOfCoffee > amount, numberOfCoffee, amount]
+    checkValue jumpi                          // [programCounter, numberOfCoffee, amount] jumps if numberOfCoffee > amount
+
+    __ERROR(INSUFFICIENT_SUPPLY)
+    0x00 mstore
+    0x04 0x00 return
+
+
+    checkValue: 
+    dup2                                    // [amount, numberOfCoffee, amount]
+    [COFFEE_PRICE_LOCATION] sload           // [coffee_price, amount, numberOfCoffee, amount]
+    mul                                     // [costTotal, numberOfCoffee, amount]
+    callvalue                               // [msg.value, costTotal, numberOfCoffee, amount]
+    dup2                                    // [costTotal, msg.value, costTotal, numberOfCoffee, amount]
+    lt                                      // [?costTotal < msg.value, costTotal, numberOfCoffee, amount]
+    dispenseCoffee jumpi                    // [programCounter, costTotal, numberOfCoffee, amount]
+
+    __ERROR(INSUFFICIENT_FUNDS)
+    0x00 mstore
+    0x04 0x00 return
+
+    dispenseCoffee:                  
+    pop                                                // [numberOfCoffee, amount]
+    sub                                                // [numberOfCoffee - amount]
+
+    // update the newNumberOfCoffee
+    [NUMBER_OF_COFFEE_LOCATION]                        // [NUMBER_OF_COFFEE_LOCATION, newNumberOfCoffee]
+    sstore                                             // []
+
+    
+    // Stop execution
+    0x00 mstore
+    0x04 0x00 return
+
+
+
+    invalidAmount:
+    __ERROR(INVALID_AMOUNT)
+    0x00 mstore
+    0x04 0x00 return
+}
+ 
+
+#define macro COFFEE_PRICE() = takes(0) returns(1) {
+    0x04 calldataload                          // gets function parameter if any
+
+    [COFFEE_PRICE_LOCATION] sload
+
+    0x00 mstore
+    0x20 0x00 return
+}
+
+
+#define macro NUMBER_OF_COFFEE() = takes(0) returns(1) {
+    0x04 calldataload
+    [NUMBER_OF_COFFEE_LOCATION]
+    sload
+
+    0x00 mstore
+    0x20 0x00 return
+}
+
+

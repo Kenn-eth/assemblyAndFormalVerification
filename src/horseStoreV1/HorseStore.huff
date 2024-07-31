@@ -1,0 +1,77 @@
+/* interface */
+#define function updateNumOfHorses(uint256) nonpayable returns()
+#define function readNumberOfHorses() view returns (uint256)
+
+#define constant NUMBER_OF_HORSES_STORAGE_SLOT = FREE_STORAGE_POINTER()
+
+
+
+// send Calldata -> Function Dispatch -> Function
+// 60008060093d393df3
+#define macro MAIN() = takes(0) returns (0) {
+    0x00                // pushes 0 into the stack [0]
+
+    calldataload       // pushes the calldata into the stack starting from the 0th byte [calldata]
+
+    // How do I cut down the calldata to have only the function selector (first four bytes)?
+    // how many bitwise right shift operation will remove the extra bytes?
+    // calldata is 32 bytes long. I need to remove the last 28 bytes
+    // 1 byte = 8 bits so bitwise right shift of 28 x 8 -> 224(dec) -> 0xE0(hex)
+
+    0xe0               // pushes e0 to the top of the stack [e0, calldata]
+    shr                // performs the bitwise right shift 224 times on the calldata
+                       // stack [func-selector]
+
+
+   // FUNCTION DISPATCHING
+   // JUMP to function data associated with the selector
+   // if functionSelector == updateNoOfHorses -> Jump to that code (jumpdest)
+   // if functionSelector == readNumberOfHorses -> Jump to that code (jumpdest)
+   // 0x7ce176d4 == updateNoOfHorses
+   // 0xe026c017 == readNumberOfHorses
+
+   
+   dup1                 // for gas optmization: duplicates fn-selector in the stack [func-sel, func-sel]
+
+   // calling updateNoOfHorses
+   __FUNC_SIG(updateNoOfHorses)             // pushes the function selector to the stack [0x7ce176d4, func-selector,  func_selector]
+   eq                     // compares func selector. 1: true, 0: false [true_if_func_sel_matches]
+   updateJump             // [updateNoOfHorsesProgramCounter, true/false]
+   jumpi                  // [] 
+   
+   // At this point [func-sel, func-sel] is in the stack because it was duplicated earlier. you can now target a new fn by passing in another fn-sel for comparism. This opmtimizes gas, instead of repeating the entire process up to this stage: 0x00 calldata 0xeo shr
+
+   // calling readNumberOfHorses
+   __FUNC_SIG(readNumberOfHorses) eq readJump jumpi
+
+   0x00 0x00 revert
+
+   updateJump:
+   SET_NUMBER_OF_HORSES()
+   readJump:
+   GET_NUMBER_OF_HORSES()
+}
+
+#define macro SET_NUMBER_OF_HORSES() = takes(0) returns(0) {
+    // 2. Get the value to store from calldata. The value is the bytes after the first four bytes in a calldata
+    0x04                           // [4]
+    calldataload                   // pushes the calldata except the first four bytes into the stack [value]
+    // 1. Give it a storage slot
+    [NUMBER_OF_HORSES_STORAGE_SLOT]         // [storage_slot, value, func_sel]
+    // 3. sstore opcode
+    sstore
+    stop
+}
+#define macro GET_NUMBER_OF_HORSES() = takes(0) returns(0) {
+    // 1. Get the storage slot
+    // 2. Load the value of that slot into memory
+    // 3. Return
+
+    [NUMBER_OF_HORSES_STORAGE_SLOT]       // [key]
+    sload                                 // [value]
+    0x00                                  // [0x00, value] 0 is the offset
+    mstore                                // [] memory: [value] there is nothing in stack
+    0x20                                  // byte size to be returned; 32 bytes in this case
+    0x00                                  // offset
+    return
+}
